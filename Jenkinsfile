@@ -11,7 +11,10 @@ pipeline {
 
         stage('Pull Image') {
             steps {
-                sh 'docker pull ${DOCKER_IMAGE}'
+                sh '''
+                docker rmi ${DOCKER_IMAGE} || true
+                docker pull ${DOCKER_IMAGE}
+                '''
             }
         }
 
@@ -28,6 +31,7 @@ pipeline {
             steps {
                 sh '''
                 for i in {1..15}; do
+                    echo "Checking API..."
                     sleep 5
                     if curl -s http://host.docker.internal:${PORT}/health | grep "ok"; then
                         echo "API Ready"
@@ -47,8 +51,9 @@ pipeline {
                 -H "Content-Type: application/json" \
                 -d '{"fixed_acidity":7.4,"volatile_acidity":0.7,"citric_acid":0,"residual_sugar":1.9,"chlorides":0.076,"free_sulfur_dioxide":11,"total_sulfur_dioxide":34,"density":0.9978,"pH":3.51,"sulphates":0.56,"alcohol":9.4}')
 
-                echo "Response: $RESPONSE"
-                echo $RESPONSE | grep wine_quality
+                echo "Valid Response: $RESPONSE"
+
+                echo $RESPONSE | grep wine_quality || exit 1
                 '''
             }
         }
@@ -61,7 +66,10 @@ pipeline {
                 -H "Content-Type: application/json" \
                 -d '{"wrong":"data"}')
 
+                echo "Invalid Request Status Code: $STATUS"
+
                 if [ "$STATUS" -eq 200 ]; then
+                    echo "Invalid input test failed"
                     exit 1
                 fi
                 '''
