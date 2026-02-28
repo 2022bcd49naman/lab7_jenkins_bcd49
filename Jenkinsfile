@@ -4,7 +4,6 @@ pipeline {
     environment {
         DOCKER_IMAGE = "2022bcd0049namanomar/wine-quality:latest"
         CONTAINER_NAME = "wine_test_container_bcd49_namanomar"
-        PORT = "8000"
     }
 
     stages {
@@ -17,16 +16,20 @@ pipeline {
 
         stage('Run Container') {
             steps {
-                sh 'docker run -d -p ${PORT}:8000 --name ${CONTAINER_NAME} ${DOCKER_IMAGE}'
+                sh '''
+                docker rm -f ${CONTAINER_NAME} || true
+                docker run -d --name ${CONTAINER_NAME} ${DOCKER_IMAGE}
+                '''
             }
         }
 
         stage('Wait for API Readiness') {
             steps {
                 sh '''
-                for i in {1..10}; do
+                for i in {1..15}; do
+                    echo "Checking API..."
                     sleep 5
-                    if curl -s http://localhost:${PORT}/health | grep "ok"; then
+                    if docker exec ${CONTAINER_NAME} curl -s http://localhost:8000/health | grep "ok"; then
                         echo "API Ready"
                         exit 0
                     fi
@@ -40,7 +43,7 @@ pipeline {
         stage('Valid Inference Test') {
             steps {
                 sh '''
-                RESPONSE=$(curl -s -X POST http://localhost:${PORT}/predict \
+                RESPONSE=$(docker exec ${CONTAINER_NAME} curl -s -X POST http://localhost:8000/predict \
                 -H "Content-Type: application/json" \
                 -d '{
                   "fixed_acidity":7.4,
@@ -66,8 +69,8 @@ pipeline {
         stage('Invalid Inference Test') {
             steps {
                 sh '''
-                STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
-                -X POST http://localhost:${PORT}/predict \
+                STATUS=$(docker exec ${CONTAINER_NAME} curl -o /dev/null -s -w "%{http_code}" \
+                -X POST http://localhost:8000/predict \
                 -H "Content-Type: application/json" \
                 -d '{"wrong":"data"}')
 
@@ -80,14 +83,13 @@ pipeline {
                 '''
             }
         }
+    }
 
-        stage('Stop Container') {
-            steps {
-                sh '''
-                docker stop ${CONTAINER_NAME}
-                docker rm ${CONTAINER_NAME}
-                '''
-            }
+    post {
+        always {
+            sh '''
+            docker rm -f ${CONTAINER_NAME} || true
+            '''
         }
     }
 }
