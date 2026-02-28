@@ -30,16 +30,21 @@ pipeline {
         stage('Wait for API Readiness') {
             steps {
                 sh '''
-                for i in {1..15}; do
-                    echo "Checking API..."
-                    sleep 5
-                    if curl -s http://host.docker.internal:${PORT}/health | grep "ok"; then
-                        echo "API Ready"
-                        exit 0
+                ATTEMPTS=15
+                COUNT=0
+
+                until curl -s http://host.docker.internal:${PORT}/health | grep "ok"
+                do
+                    COUNT=$((COUNT+1))
+                    if [ $COUNT -ge $ATTEMPTS ]; then
+                        echo "API failed to start"
+                        exit 1
                     fi
+                    echo "Waiting for API..."
+                    sleep 5
                 done
-                echo "API failed to start"
-                exit 1
+
+                echo "API Ready"
                 '''
             }
         }
